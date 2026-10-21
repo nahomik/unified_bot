@@ -11,6 +11,24 @@ logger = logging.getLogger("BackChecker")
 
 TOKEN = os.getenv("BACK_CHECKER_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
 
+def parse_creds(google_creds_json):
+    if not google_creds_json:
+        return None, "Empty credentials"
+    google_creds_json = google_creds_json.strip()
+    if google_creds_json.startswith("'") and google_creds_json.endswith("'"):
+        google_creds_json = google_creds_json[1:-1].strip()
+    try:
+        data = json.loads(google_creds_json)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict):
+            return None, "Credentials JSON is not a dictionary"
+        if "private_key" in data and isinstance(data["private_key"], str):
+            data["private_key"] = data["private_key"].replace("\\n", "\n")
+        return data, None
+    except Exception as e:
+        return None, f"JSON parse error: {e}"
+
 def get_sheet():
     google_creds_json = (
         os.getenv("BACK_CHECKER_GOOGLE_CREDS")
@@ -27,33 +45,30 @@ def get_sheet():
             except Exception as e:
                 logger.error(f"Error reading service_account.json: {e}")
 
-    if not google_creds_json:
-        logger.warning("No Google credentials found in BACK_CHECKER_GOOGLE_CREDS, GOOGLE_CREDENTIALS, GOOGLE_CREDS_JSON, or service_account.json")
-        return None
+    creds_dict, err = parse_creds(google_creds_json)
+    if not creds_dict:
+        logger.warning(f"Google credentials error: {err}")
+        return None, err
+
     try:
-        creds_dict = json.loads(google_creds_json)
         scope = [
             "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive",
             "https://www.googleapis.com/auth/spreadsheets",
         ]
-        try:
-            from google.oauth2.service_account import Credentials
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-            client = gspread.authorize(creds)
-        except ImportError:
-            from oauth2client.service_account import ServiceAccountCredentials
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope[:2])
-            client = gspread.authorize(creds)
+        from google.oauth2.service_account import Credentials
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
 
         sheet_id = os.getenv("BACK_CHECKER_SHEET_ID") or "1XPCySQoTs9qc6plq_lp-s7KgytTeND5w0l4WRBpB0DU"
         try:
-            return client.open_by_key(sheet_id).sheet1
-        except Exception:
-            return client.open("Back Checker Data").sheet1
+            return client.open_by_key(sheet_id).sheet1, None
+        except Exception as e_key:
+            logger.warning(f"Could not open by key {sheet_id}: {e_key}, trying title...")
+            return client.open("Back Checker Data").sheet1, None
     except Exception as e:
         logger.error(f"Error connecting to Google Sheet: {type(e).__name__} - {e}")
-        return None
+        return None, f"{type(e).__name__}: {e}"
 
 # States
 (LANGUAGE, NAME, SUPPLY_UNIT, BACK_METHOD, SURVEYS, WORKER_SURVEY, WORKER_SURVEY_COUNT, COMMENT, CONFIRM) = range(9)
@@ -236,13 +251,17 @@ async def save_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         d.get('worker_survey'), d.get('worker_survey_count'), d.get('comment')
     ]
     
-    sheet = get_sheet()
+    sheet, err = get_sheet()
     if sheet:
-        sheet.append_row(row)
-        await update.message.reply_text(get_t(context, 'saved'), reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True))
+        try:
+            sheet.append_row(row)
+            await update.message.reply_text(get_t(context, 'saved'), reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True))
+        except Exception as e:
+            logger.error(f"Failed to append row: {e}")
+            await update.message.reply_text(f"Warning: Could not save to Google Sheet ({type(e).__name__}: {e}).", reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True))
     else:
-        logger.error("Failed to append row: Sheet not accessible")
-        await update.message.reply_text("Warning: Could not save to Google Sheet. Please check credentials.", reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True))
+        logger.error(f"Failed to append row: Sheet not accessible: {err}")
+        await update.message.reply_text(f"Warning: Could not save to Google Sheet ({err}).", reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True))
     return ConversationHandler.END
 
 def run_bot():

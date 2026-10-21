@@ -42,6 +42,24 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
+def parse_creds(google_creds_json):
+    if not google_creds_json:
+        return None, "Empty credentials"
+    google_creds_json = google_creds_json.strip()
+    if google_creds_json.startswith("'") and google_creds_json.endswith("'"):
+        google_creds_json = google_creds_json[1:-1].strip()
+    try:
+        data = json.loads(google_creds_json)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict):
+            return None, "Credentials JSON is not a dictionary"
+        if "private_key" in data and isinstance(data["private_key"], str):
+            data["private_key"] = data["private_key"].replace("\\n", "\n")
+        return data, None
+    except Exception as e:
+        return None, f"JSON parse error: {e}"
+
 def get_client():
     creds_json = GOOGLE_CREDS_JSON
     if not creds_json:
@@ -50,9 +68,9 @@ def get_client():
             with open(file_path, "r", encoding="utf-8") as f:
                 creds_json = f.read()
 
-    if not creds_json:
-        raise ValueError("Google credentials JSON is not configured (set GOOGLE_CREDS_JSON, POULTRY_GOOGLE_CREDS, or add service_account.json)")
-    creds_dict = json.loads(creds_json)
+    creds_dict, err = parse_creds(creds_json)
+    if not creds_dict:
+        raise ValueError(f"Google credentials error: {err}")
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return gspread.authorize(creds)
 
