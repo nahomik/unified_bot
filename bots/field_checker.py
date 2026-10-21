@@ -46,9 +46,12 @@ def get_sheet():
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope[:2])
             client = gspread.authorize(creds)
 
+        sheet_id = os.getenv("FIELD_CHECKER_SHEET_ID")
+        if sheet_id:
+            return client.open_by_key(sheet_id).sheet1
         return client.open("Field Checker Data").sheet1
     except Exception as e:
-        logger.error(f"Error connecting to Field Checker Sheet: {e}")
+        logger.error(f"Error connecting to Field Checker Sheet: {type(e).__name__} - {e}")
         return None
 
 # States
