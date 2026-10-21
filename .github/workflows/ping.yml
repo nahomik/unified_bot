@@ -12,5 +12,4 @@ jobs:
     steps:
       - name: Ping Unified Bot Service
         run: |
-          # Replace with your actual Render service URL:
-          curl -s -f "https://YOUR_SERVICE_NAME.onrender.com/healthz" || true
+          curl -s -f "https://unified-bot.onrender.com/healthz" || true
