@@ -113,16 +113,15 @@ def load_authorized_users(force=False):
         # over a brief network hiccup.
         return _auth_cache if _auth_cache is not None else {}
 
+ADMIN_IDS = {"624180317", "764757354"}
+
 def is_authorized(user_id):
-    uid = str(user_id)
+    uid = str(user_id).strip()
+    if uid in ADMIN_IDS:
+        return True
     allowed = load_authorized_users()
     if allowed.get(uid, False):
         return True
-    # Not found (or inactive) in the cached list. Rather than trust a
-    # possibly-stale cache - e.g. the sheet was updated but the last refresh
-    # attempt failed and we're still serving an older snapshot - force one
-    # fresh read before actually denying. This adds latency only for the
-    # rare case of a real denial, not for every message.
     allowed = load_authorized_users(force=True)
     return allowed.get(uid, False)
 

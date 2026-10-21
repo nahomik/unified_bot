@@ -46,10 +46,11 @@ def get_sheet():
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope[:2])
             client = gspread.authorize(creds)
 
-        sheet_id = os.getenv("BACK_CHECKER_SHEET_ID")
-        if sheet_id:
+        sheet_id = os.getenv("BACK_CHECKER_SHEET_ID") or "1XPCySQoTs9qc6plq_lp-s7KgytTeND5w0l4WRBpB0DU"
+        try:
             return client.open_by_key(sheet_id).sheet1
-        return client.open("Back Checker Data").sheet1
+        except Exception:
+            return client.open("Back Checker Data").sheet1
     except Exception as e:
         logger.error(f"Error connecting to Google Sheet: {type(e).__name__} - {e}")
         return None
