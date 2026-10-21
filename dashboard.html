@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poultry Farm Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%90%94</text></svg>">
+<style>
+  :root {
+    --bg: #faf6ee;
+    --surface: #ffffff;
+    --border: #e8dfcb;
+    --ink: #2b2118;
+    --muted: #8a7b64;
+    --gold: #e8a33d;
+    --barn: #b23a2e;
+    --leaf: #4c7a5b;
+    --sky: #4a7fa6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px clamp(16px, 4vw, 40px);
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Noto Sans Ethiopic", sans-serif;
+    font-size: 17px;
+    line-height: 1.4;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* A separate fixed layer behind everything holds the (blurred) photo, so the
+     blur filter never touches the actual page content sitting on top of it. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    filter: blur(8px) brightness(0.92);
+    transform: scale(1.05); /* avoids blurred edges peeking in at the viewport border */
+  }
+
+  @media (orientation: landscape) {
+    body::before { background-image: url("/static/landscape.jpg"); }
+  }
+  @media (orientation: portrait) {
+    body::before { background-image: url("/static/normal.jpg"); }
+  }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; border-bottom: 3px solid var(--ink); padding-bottom: 16px; }
+  .header-left h1 { font-size: clamp(1.6rem, 3vw, 2.3rem); margin: 0; font-weight: 800; letter-spacing: -0.01em; }
+  .updated { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+
+  .lang-switch { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+  .lang-btn { border: none; background: transparent; color: var(--ink); font-family: inherit; font-weight: 700; font-size: 0.85rem; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .lang-btn.active { background: var(--ink); color: var(--surface); }
+
+  #status { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 1.1rem; }
+  #status.error { color: var(--barn); }
+  #retryBtn { margin-top: 14px; background: var(--ink); color: var(--surface); border: none; border-radius: 8px; padding: 10px 22px; font-size: 1rem; cursor: pointer; font-family: inherit; }
+
+  #app { display: none; }
+
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+  .card .label { color: var(--muted); font-size: 0.92rem; margin-bottom: 8px; }
+  .card .value { font-size: 2.05rem; font-weight: 800; }
+
+  .tabrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tab {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 999px; padding: 9px 18px; font-size: 0.95rem; cursor: pointer;
+    font-family: inherit; font-weight: 600;
+  }
+  .tab:hover { border-color: var(--ink); }
+  .tab.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  #rangeTabs { margin-bottom: 26px; }
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px; margin-bottom: 26px; }
+  .chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .chart-box h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 14px; }
+  canvas { max-height: 300px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  th, td { padding: 13px 16px; text-align: right; font-size: 0.98rem; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr:last-child td { border-bottom: none; }
+  tr.total-row td { font-weight: 800; background: rgba(232,163,61,0.12); }
+  .pct { color: var(--muted); font-size: 0.86rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1 id="pageTitle">Poultry Farm Dashboard</h1>
+    <div class="updated" id="updatedNote"></div>
+  </div>
+  <div class="lang-switch" id="langSwitch">
+    <button class="lang-btn" data-lang="en">EN</button>
+    <button class="lang-btn" data-lang="am">አማ</button>
+  </div>
+</header>
+
+<div id="status">Loading data...</div>
+
+<div id="app">
+  <div class="cards" id="cards"></div>
+
+  <p class="eyebrow" id="rangeEyebrow">Time Range</p>
+  <div class="tabrow" id="rangeTabs">
+    <button class="tab" data-range="today">Today</button>
+    <button class="tab" data-range="yesterday">Yesterday</button>
+    <button class="tab" data-range="week">This Week</button>
+    <button class="tab" data-range="lastweek">Last Week</button>
+    <button class="tab" data-range="month">This Month</button>
+    <button class="tab active" data-range="all">All Time</button>
+  </div>
+
+  <p class="eyebrow" id="siteEyebrow">Site</p>
+  <div class="tabrow" id="siteTabs">
+    <button class="tab active" data-site="__ALL__">All Sites</button>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box"><h2 id="eggsTitle">Eggs per Day</h2><canvas id="eggsChart"></canvas></div>
+    <div class="chart-box"><h2 id="revenueTitle">Revenue per Day (Birr)</h2><canvas id="revenueChart"></canvas></div>
+    <div class="chart-box"><h2 id="feedTitle">Feed per Day (kg)</h2><canvas id="feedChart"></canvas></div>
+    <div class="chart-box"><h2 id="siteEggsChartH2">Eggs by Site (count &amp; %)</h2><canvas id="siteEggsChart"></canvas></div>
+    <div class="chart-box"><h2 id="siteRevenueChartH2">Revenue by Site (count &amp; %)</h2><canvas id="siteRevenueChart"></canvas></div>
+  </div>
+
+  <p class="eyebrow" id="summaryEyebrow">Site Summary</p>
+  <table>
+    <thead><tr>
+      <th id="thSite">Site</th><th id="thEggs">Eggs</th><th id="thBroken">Broken</th><th id="thSold">Sold</th><th id="thRevenue">Revenue (Birr)</th>
+    </tr></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<script>
+const I18N = {
+  en: {
+    pageTitle: "Poultry Farm Dashboard",
+    lastUpdated: "Last updated: ",
+    loading: "Loading data...",
+    chartLibError: "Could not load the chart library. Please check your internet connection and reload the page.",
+    dataError: "Could not load data. Please try again shortly. (",
+    retry: "Retry",
+    timeRange: "Time Range",
+    rangeToday: "Today",
+    rangeYesterday: "Yesterday",
+    rangeWeek: "This Week",
+    rangeLastWeek: "Last Week",
+    rangeMonth: "This Month",
+    rangeAll: "All Time",
+    site: "Site",
+    allSites: "All Sites",
+    eggsPerDay: "Eggs per Day",
+    revenuePerDay: "Revenue per Day (Birr)",
+    feedPerDay: "Feed per Day (kg)",
+    eggsBySite: "Eggs by Site (count & %)",
+    revenueBySite: "Revenue by Site (count & %)",
+    siteSummary: "Site Summary",
+    eggs: "Eggs",
+    broken: "Broken",
+    sold: "Sold",
+    revenueBirr: "Revenue (Birr)",
+    totalAllSites: "Total (All Sites)",
+    cardEggs: "Eggs",
+    cardRevenue: "Revenue (Birr)",
+    cardBroken: "Broken Eggs",
+    cardSold: "Eggs Sold",
+    cardTotalFeed: "Total Feed (kg)",
+    cardFodder: "Regular Feed (kg)",
+    cardOtherFeed: "Alfalfa/Greens (kg)",
+    cardAvgPrice: "Avg Price/Egg (Birr)",
+    dsCollected: "Collected",
+    dsBroken: "Broken",
+    dsSold: "Sold",
+    dsRevenue: "Revenue (Birr)",
+    dsFodder: "Regular Feed",
+    dsOther: "Alfalfa/Greens",
+    dsEggs: "Eggs",
+  },
+  am: {
+    pageTitle: "የዶሮ እርባታ ዳሽቦርድ",
+    lastUpdated: "የመጨረሻ ዝማኔ: ",
+    loading: "መረጃ በመጫን ላይ...",
+    chartLibError: "የግራፍ ላይብረሪ መጫን አልተቻለም። እባክዎ የበይነመረብ ግንኙነትዎን ያረጋግጡ እና ገጹን እንደገና ይጫኑ።",
+    dataError: "መረጃ መጫን አልተቻለም። እባክዎ ትንሽ ቆይተው ይሞክሩ። (",
+    retry: "እንደገና ሞክር",
+    timeRange: "የጊዜ ገደብ",
+    rangeToday: "ዛሬ",
+    rangeYesterday: "ትናንት",
+    rangeWeek: "ይህ ሳምንት",
+    rangeLastWeek: "ያለፈው ሳምንት",
+    rangeMonth: "ይህ ወር",
+    rangeAll: "ሁሉም ጊዜ",
+    site: "ቦታ",
+    allSites: "ሁሉም ቦታዎች",
+    eggsPerDay: "እንቁላል በቀን",
+    revenuePerDay: "ገቢ በቀን (ብር)",
+    feedPerDay: "መኖ በቀን (ኪግ)",
+    eggsBySite: "እንቁላል በቦታ (ቁጥር እና መቶኛ)",
+    revenueBySite: "ገቢ በቦታ (ቁጥር እና መቶኛ)",
+    siteSummary: "በቦታ ማጠቃለያ",
+    eggs: "እንቁላል",
+    broken: "የተሰበረ",
+    sold: "የተሸጠ",
+    revenueBirr: "ገቢ (ብር)",
+    totalAllSites: "ጠቅላላ (ሁሉም ቦታ)",
+    cardEggs: "እንቁላል",
+    cardRevenue: "ገቢ (ብር)",
+    cardBroken: "የተሰበረ እንቁላል",
+    cardSold: "የተሸጠ እንቁላል",
+    cardTotalFeed: "ጠቅላላ መኖ (ኪግ)",
+    cardFodder: "መደበኛ መኖ (ኪግ)",
+    cardOtherFeed: "አልፋ አልፋ/ቅጠላ ቅጠል (ኪግ)",
+    cardAvgPrice: "የ1 እንቁላል አማካይ ዋጋ (ብር)",
+    dsCollected: "ተሰበሰበ",
+    dsBroken: "ተሰበረ",
+    dsSold: "ተሸጠ",
+    dsRevenue: "ገቢ (ብር)",
+    dsFodder: "መደበኛ መኖ",
+    dsOther: "አልፋ አልፋ/ቅጠላ ቅጠል",
+    dsEggs: "እንቁላል",
+  },
+};
+
+let currentLang = localStorage.getItem("poultry_dashboard_lang") || "en";
+function t(key) { return I18N[currentLang][key] || key; }
+
+function applyStaticText() {
+  document.title = t("pageTitle");
+  document.getElementById("pageTitle").textContent = "\ud83d\udc14 " + t("pageTitle");
+  document.getElementById("rangeEyebrow").textContent = t("timeRange");
+  document.querySelector('[data-range="today"]').textContent = t("rangeToday");
+  document.querySelector('[data-range="yesterday"]').textContent = t("rangeYesterday");
+  document.querySelector('[data-range="week"]').textContent = t("rangeWeek");
+  document.querySelector('[data-range="lastweek"]').textContent = t("rangeLastWeek");
+  document.querySelector('[data-range="month"]').textContent = t("rangeMonth");
+  document.querySelector('[data-range="all"]').textContent = t("rangeAll");
+  document.getElementById("siteEyebrow").textContent = t("site");
+  document.querySelector('[data-site="__ALL__"]').textContent = t("allSites");
+  document.getElementById("siteEggsChartH2").textContent = t("eggsBySite");
+  document.getElementById("siteRevenueChartH2").textContent = t("revenueBySite");
+  document.getElementById("summaryEyebrow").textContent = t("siteSummary");
+  document.getElementById("thSite").textContent = t("site");
+  document.getElementById("thEggs").textContent = t("eggs");
+  document.getElementById("thBroken").textContent = t("broken");
+  document.getElementById("thSold").textContent = t("sold");
+  document.getElementById("thRevenue").textContent = t("revenueBirr");
+  document.querySelectorAll(".lang-btn").forEach(b => b.classList.toggle("active", b.dataset.lang === currentLang));
+  if (statusEl.style.display !== "none" && statusEl.className !== "error") {
+    statusEl.textContent = t("loading");
+  }
+}
+
+const statusEl = document.getElementById("status");
+const appEl = document.getElementById("app");
+
+function showError(kind, extra) {
+  statusEl.className = "error";
+  const msg = kind === "chartlib" ? t("chartLibError") : (t("dataError") + (extra || "") + ")");
+  statusEl.innerHTML = msg + '<br><button id="retryBtn">' + t("retry") + '</button>';
+  document.getElementById("retryBtn").addEventListener("click", load);
+  appEl.style.display = "none";
+  statusEl.style.display = "block";
+}
+
+const CHART_JS_SOURCES = [
+  "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js",
+  "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js",
+  "https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js",
+];
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("failed: " + src));
+    document.head.appendChild(s);
+  });
+}
+
+function loadChartJs(sources) {
+  if (typeof Chart !== "undefined") return Promise.resolve();
+  if (!sources.length) return Promise.reject(new Error("all sources failed"));
+  return loadScript(sources[0]).catch(() => loadChartJs(sources.slice(1)));
+}
+
+let lastData = null;
+let onLangChange = null;
+let barLabelsRegistered = false;
+
+function load() {
+  statusEl.className = "";
+  statusEl.textContent = t("loading");
+  statusEl.style.display = "block";
+  appEl.style.display = "none";
+
+  loadChartJs(CHART_JS_SOURCES)
+    .then(() => fetch("/api/dashboard-data"))
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(data => {
+      statusEl.style.display = "none";
+      appEl.style.display = "block";
+      initDashboard(data);
+    })
+    .catch(err => {
+      if (typeof Chart === "undefined") {
+        showError("chartlib");
+      } else {
+        showError("data", err.message);
+      }
+    });
+}
+
+function initDashboard(data) {
+  lastData = data;
+  document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today;
+
+  const PALETTE = ["#4a7fa6", "#4c7a5b", "#e8a33d", "#b23a2e", "#8e6bb0", "#c76b98", "#2f9e9e"];
+  const siteColor = {};
+  data.sites.forEach((s, i) => { siteColor[s] = PALETTE[i % PALETTE.length]; });
+  siteColor["__ALL__"] = "#4a7fa6";
+
+  const barLabels = {
+    id: "barLabels",
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      chart.data.datasets.forEach((dataset, dIdx) => {
+        if (!dataset.pctLabels) return;
+        const meta = chart.getDatasetMeta(dIdx);
+        meta.data.forEach((bar, i) => {
+          const val = dataset.data[i];
+          const pct = dataset.pctLabels[i];
+          ctx.save();
+          ctx.fillStyle = "#2b2118";
+          ctx.font = "700 13px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(val.toLocaleString() + " (" + pct + "%)", bar.x, bar.y - 8);
+          ctx.restore();
+        });
+      });
+    }
+  };
+  if (!barLabelsRegistered) { Chart.register(barLabels); barLabelsRegistered = true; }
+  Chart.defaults.color = "#2b2118";
+  Chart.defaults.borderColor = "#e8dfcb";
+  Chart.defaults.font.size = 13;
+
+  const siteTabsEl = document.getElementById("siteTabs");
+  document.querySelectorAll("#siteTabs .tab:not([data-site=\"__ALL__\"])").forEach(b => b.remove());
+  data.sites.forEach(s => {
+    const btn = document.createElement("button");
+    btn.className = "tab";
+    btn.dataset.site = s;
+    btn.textContent = s;
+    siteTabsEl.appendChild(btn);
+  });
+
+  let selectedSite = "__ALL__";
+  let selectedRange = "all";
+
+  function mondayOf(dateObj) {
+    // getDay(): Sun=0..Sat=6. We want Monday as the start of the week.
+    const day = (dateObj.getDay() + 6) % 7;
+    const monday = new Date(dateObj);
+    monday.setDate(dateObj.getDate() - day);
+    return monday;
+  }
+  function iso(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+
+  function rangeBounds() {
+    const today = new Date(data.today + "T00:00:00");
+    if (selectedRange === "today") {
+      return { start: data.today, end: data.today };
+    }
+    if (selectedRange === "yesterday") {
+      const y = new Date(today);
+      y.setDate(today.getDate() - 1);
+      return { start: iso(y), end: iso(y) };
+    }
+    if (selectedRange === "week") {
+      // Monday through today (this week isn't over yet).
+      return { start: iso(mondayOf(today)), end: data.today };
+    }
+    if (selectedRange === "lastweek") {
+      // The full previous Monday-to-Sunday week.
+      const thisMonday = mondayOf(today);
+      const lastMonday = new Date(thisMonday);
+      lastMonday.setDate(thisMonday.getDate() - 7);
+      const lastSunday = new Date(thisMonday);
+      lastSunday.setDate(thisMonday.getDate() - 1);
+      return { start: iso(lastMonday), end: iso(lastSunday) };
+    }
+    if (selectedRange === "month") {
+      return { start: data.today.slice(0, 8) + "01", end: data.today };
+    }
+    return { start: null, end: data.today };
+  }
+
+  function indicesInRange() {
+    const { start, end } = rangeBounds();
+    const idxs = [];
+    data.dates.forEach((d, i) => {
+      if ((!start || d >= start) && d <= end) idxs.push(i);
+    });
+    return idxs;
+  }
+
+  function sumField(site, field, idxs) {
+    const arr = (data.series[site] || data.series.__ALL__)[field];
+    return idxs.reduce((acc, i) => acc + arr[i], 0);
+  }
+
+  let eggsChart, revenueChart, feedChart, siteEggsChart, siteRevenueChart;
+
+  function render() {
+    const idxs = indicesInRange();
+    const labels = idxs.map(i => data.dates[i]);
+    const s = selectedSite;
+
+    const eggs = idxs.map(i => data.series[s].eggs[i]);
+    const broken = idxs.map(i => data.series[s].broken[i]);
+    const sold = idxs.map(i => data.series[s].sold[i]);
+    const revenue = idxs.map(i => data.series[s].revenue[i]);
+    const fodder = idxs.map(i => data.series[s].fodder_kg[i]);
+    const other = idxs.map(i => data.series[s].other_kg[i]);
+
+    const totalEggs = eggs.reduce((a, b) => a + b, 0);
+    const totalBroken = broken.reduce((a, b) => a + b, 0);
+    const totalSold = sold.reduce((a, b) => a + b, 0);
+    const totalRevenue = revenue.reduce((a, b) => a + b, 0);
+    const totalFodder = fodder.reduce((a, b) => a + b, 0);
+    const totalOther = other.reduce((a, b) => a + b, 0);
+    const totalFeed = totalFodder + totalOther;
+    const brokenRate = totalEggs ? (totalBroken / totalEggs * 100) : 0;
+    const soldRate = totalEggs ? (totalSold / totalEggs * 100) : 0;
+    const fodderRate = totalFeed ? (totalFodder / totalFeed * 100) : 0;
+    const otherRate = totalFeed ? (totalOther / totalFeed * 100) : 0;
+    const avgPrice = totalSold ? (totalRevenue / totalSold) : 0;
+
+    const cardsEl = document.getElementById("cards");
+    cardsEl.innerHTML = "";
+    // [label, value, color, percentage-or-null]. The percentage is shown next
+    // to the number wherever there's a meaningful whole to be a share of -
+    // eggs collected for broken/sold, total feed for fodder/other.
+    const cardDefs = [
+      [t("cardEggs"), totalEggs.toLocaleString(), "var(--sky)", null],
+      [t("cardRevenue"), totalRevenue.toLocaleString(), "var(--gold)", null],
+      [t("cardBroken"), totalBroken.toLocaleString(), "var(--barn)", brokenRate],
+      [t("cardSold"), totalSold.toLocaleString(), "var(--leaf)", soldRate],
+      [t("cardAvgPrice"), avgPrice.toFixed(2), "var(--gold)", null],
+      [t("cardTotalFeed"), totalFeed.toLocaleString(), "var(--sky)", null],
+      [t("cardFodder"), totalFodder.toLocaleString(), "var(--sky)", fodderRate],
+      [t("cardOtherFeed"), totalOther.toLocaleString(), "var(--leaf)", otherRate],
+    ];
+    cardDefs.forEach(([label, value, color, pct]) => {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.style.setProperty("--c", color);
+      const pctHtml = pct === null ? "" : ' <span class="pct">(' + pct.toFixed(1) + '%)</span>';
+      div.innerHTML = '<div class="label"><span class="dot"></span>' + label + '</div><div class="value">' + value + pctHtml + '</div>';
+      cardsEl.appendChild(div);
+    });
+
+
+    if (!eggsChart) {
+      eggsChart = new Chart(document.getElementById("eggsChart"), {
+        type: "line",
+        data: { labels, datasets: [
+          { label: t("dsCollected"), data: eggs, borderColor: "#4a7fa6", tension: 0.25 },
+          { label: t("dsBroken"), data: broken, borderColor: "#b23a2e", tension: 0.25 },
+          { label: t("dsSold"), data: sold, borderColor: "#4c7a5b", tension: 0.25 },
+        ]},
+        options: { responsive: true }
+      });
+      revenueChart = new Chart(document.getElementById("revenueChart"), {
+        type: "line",
+        data: { labels, datasets: [
+          { label: t("dsRevenue"), data: revenue, borderColor: "#e8a33d", backgroundColor: "rgba(232,163,61,0.18)", fill: true, tension: 0.25 },
+        ]},
+        options: { responsive: true }
+      });
+      feedChart = new Chart(document.getElementById("feedChart"), {
+        type: "bar",
+        data: { labels, datasets: [
+          { label: t("dsFodder"), data: fodder, backgroundColor: "#4a7fa6" },
+          { label: t("dsOther"), data: other, backgroundColor: "#4c7a5b" },
+        ]},
+        options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
+      });
+    } else {
+      eggsChart.data.labels = labels;
+      eggsChart.data.datasets[0].label = t("dsCollected");
+      eggsChart.data.datasets[0].data = eggs;
+      eggsChart.data.datasets[1].label = t("dsBroken");
+      eggsChart.data.datasets[1].data = broken;
+      eggsChart.data.datasets[2].label = t("dsSold");
+      eggsChart.data.datasets[2].data = sold;
+      eggsChart.update();
+      revenueChart.data.labels = labels;
+      revenueChart.data.datasets[0].label = t("dsRevenue");
+      revenueChart.data.datasets[0].data = revenue;
+      revenueChart.update();
+      feedChart.data.labels = labels;
+      feedChart.data.datasets[0].label = t("dsFodder");
+      feedChart.data.datasets[0].data = fodder;
+      feedChart.data.datasets[1].label = t("dsOther");
+      feedChart.data.datasets[1].data = other;
+      feedChart.update();
+    }
+
+    const label = s === "__ALL__" ? t("allSites") : s;
+    document.getElementById("eggsTitle").textContent = t("eggsPerDay") + " - " + label;
+    document.getElementById("revenueTitle").textContent = t("revenuePerDay") + " - " + label;
+    document.getElementById("feedTitle").textContent = t("feedPerDay") + " - " + label;
+
+    const siteEggsVals = data.sites.map(site => sumField(site, "eggs", idxs));
+    const siteRevenueVals = data.sites.map(site => sumField(site, "revenue", idxs));
+    const eggsGrandTotal = siteEggsVals.reduce((a, b) => a + b, 0);
+    const revenueGrandTotal = siteRevenueVals.reduce((a, b) => a + b, 0);
+    const siteEggsPct = siteEggsVals.map(v => eggsGrandTotal ? +(v / eggsGrandTotal * 100).toFixed(1) : 0);
+    const siteRevenuePct = siteRevenueVals.map(v => revenueGrandTotal ? +(v / revenueGrandTotal * 100).toFixed(1) : 0);
+    const siteColors = data.sites.map(site => siteColor[site]);
+
+    if (!siteEggsChart) {
+      siteEggsChart = new Chart(document.getElementById("siteEggsChart"), {
+        type: "bar",
+        data: { labels: data.sites, datasets: [{ label: t("dsEggs"), data: siteEggsVals, backgroundColor: siteColors, pctLabels: siteEggsPct }] },
+        options: {
+          responsive: true,
+          onClick: (evt, els) => { if (els.length) selectSite(data.sites[els[0].index]); },
+          scales: { y: { grace: "20%" } },
+          plugins: { legend: { display: false } }
+        }
+      });
+      siteRevenueChart = new Chart(document.getElementById("siteRevenueChart"), {
+        type: "bar",
+        data: { labels: data.sites, datasets: [{ label: t("dsRevenue"), data: siteRevenueVals, backgroundColor: siteColors, pctLabels: siteRevenuePct }] },
+        options: {
+          responsive: true,
+          onClick: (evt, els) => { if (els.length) selectSite(data.sites[els[0].index]); },
+          scales: { y: { grace: "20%" } },
+          plugins: { legend: { display: false } }
+        }
+      });
+    } else {
+      siteEggsChart.data.datasets[0].label = t("dsEggs");
+      siteEggsChart.data.datasets[0].data = siteEggsVals;
+      siteEggsChart.data.datasets[0].pctLabels = siteEggsPct;
+      siteEggsChart.update();
+      siteRevenueChart.data.datasets[0].label = t("dsRevenue");
+      siteRevenueChart.data.datasets[0].data = siteRevenueVals;
+      siteRevenueChart.data.datasets[0].pctLabels = siteRevenuePct;
+      siteRevenueChart.update();
+    }
+
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
+    data.sites.forEach((site, i) => {
+      const e = siteEggsVals[i];
+      const rev = siteRevenueVals[i];
+      const brk = sumField(site, "broken", idxs);
+      const sld = sumField(site, "sold", idxs);
+      const brkPct = e ? (brk / e * 100).toFixed(1) : "0.0";
+      const sldPct = e ? (sld / e * 100).toFixed(1) : "0.0";
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + site + "</td>" +
+        "<td>" + e.toLocaleString() + ' <span class="pct">(' + siteEggsPct[i] + "%)</span></td>" +
+        "<td>" + brk.toLocaleString() + ' <span class="pct">(' + brkPct + "%)</span></td>" +
+        "<td>" + sld.toLocaleString() + ' <span class="pct">(' + sldPct + "%)</span></td>" +
+        "<td>" + rev.toLocaleString() + ' <span class="pct">(' + siteRevenuePct[i] + "%)</span></td>";
+      tbody.appendChild(tr);
+    });
+    const totalTr = document.createElement("tr");
+    totalTr.className = "total-row";
+    const totalBroken2 = data.sites.reduce((acc, site) => acc + sumField(site, "broken", idxs), 0);
+    const totalSold2 = data.sites.reduce((acc, site) => acc + sumField(site, "sold", idxs), 0);
+    totalTr.innerHTML = "<td>" + t("totalAllSites") + "</td>" +
+      "<td>" + eggsGrandTotal.toLocaleString() + ' <span class="pct">(100%)</span></td>' +
+      "<td>" + totalBroken2.toLocaleString() + "</td>" +
+      "<td>" + totalSold2.toLocaleString() + "</td>" +
+      "<td>" + revenueGrandTotal.toLocaleString() + ' <span class="pct">(100%)</span></td>';
+    tbody.appendChild(totalTr);
+  }
+
+  function selectSite(site) {
+    selectedSite = site;
+    document.querySelectorAll("#siteTabs .tab").forEach(btn => btn.classList.toggle("active", btn.dataset.site === site));
+    render();
+  }
+
+  function selectRange(range) {
+    selectedRange = range;
+    document.querySelectorAll("#rangeTabs .tab").forEach(btn => btn.classList.toggle("active", btn.dataset.range === range));
+    render();
+  }
+
+  document.getElementById("siteTabs").onclick = e => {
+    const btn = e.target.closest(".tab");
+    if (btn) selectSite(btn.dataset.site);
+  };
+  document.getElementById("rangeTabs").onclick = e => {
+    const btn = e.target.closest(".tab");
+    if (btn) selectRange(btn.dataset.range);
+  };
+
+  onLangChange = () => {
+    document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today;
+    render();
+  };
+
+  render();
+}
+
+document.getElementById("langSwitch").addEventListener("click", e => {
+  const btn = e.target.closest(".lang-btn");
+  if (!btn || btn.dataset.lang === currentLang) return;
+  currentLang = btn.dataset.lang;
+  localStorage.setItem("poultry_dashboard_lang", currentLang);
+  applyStaticText();
+  if (onLangChange) onLangChange();
+});
+
+applyStaticText();
+load();
+</script>
+</body>
+</html>

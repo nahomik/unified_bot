@@ -1,0 +1,16 @@
+name: Ping Render Keep-Alive
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render from going to sleep
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Unified Bot Service
+        run: |
+          # Replace with your actual Render service URL:
+          curl -s -f "https://YOUR_SERVICE_NAME.onrender.com/healthz" || true

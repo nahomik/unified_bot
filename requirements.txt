@@ -1,0 +1,7 @@
+python-telegram-bot>=20.0
+Flask>=3.0.0
+gunicorn>=22.0.0
+requests>=2.31.0
+gspread>=6.0.0
+google-auth>=2.20.0
+oauth2client>=4.1.3
