@@ -60,7 +60,7 @@ def get_sheet():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
 
-        sheet_id = os.getenv("BACK_CHECKER_SHEET_ID") or "1XPCySQoTs9qc6plq_lp-s7KgytTeND5w0l4WRBpB0DU"
+        sheet_id = os.getenv("BACK_CHECKER_SHEET_ID") or "1HUyB6Q5DVz0GbjS7pc-LNPi_aQkqS_lKczerF8R5-QE"
         try:
             return client.open_by_key(sheet_id).sheet1, None
         except Exception as e_key:

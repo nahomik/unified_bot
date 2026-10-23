@@ -3,6 +3,8 @@ __pycache__/
 *$py.class
 .env
 service_account.json
+verified_creds.json
+test_env/
 .venv/
 env/
 venv/
