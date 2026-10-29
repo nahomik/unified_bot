@@ -130,6 +130,10 @@
     <button class="tab active" data-site="__ALL__">All Sites</button>
   </div>
 
+  <div id="noDataNotice" style="display:none; padding:12px 18px; margin:16px 0; background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; color:#92400e; font-size:14px; font-weight:600; text-align:center;">
+    ⚠️ <span id="noDataNoticeText"></span>
+  </div>
+
   <div class="charts">
     <div class="chart-box"><h2 id="eggsTitle">Eggs per Day</h2><canvas id="eggsChart"></canvas></div>
     <div class="chart-box"><h2 id="revenueTitle">Revenue per Day (Birr)</h2><canvas id="revenueChart"></canvas></div>
@@ -191,6 +195,8 @@ const I18N = {
     dsFodder: "Regular Feed",
     dsOther: "Alfalfa/Greens",
     dsEggs: "Eggs",
+    lastReportOn: " | Latest entry: ",
+    noDataRange: "No reports have been submitted for this time range. The latest recorded entry was on ",
   },
   am: {
     pageTitle: "የዶሮ እርባታ ዳሽቦርድ",
@@ -234,6 +240,8 @@ const I18N = {
     dsFodder: "መደበኛ መኖ",
     dsOther: "አልፋ አልፋ/ቅጠላ ቅጠል",
     dsEggs: "እንቁላል",
+    lastReportOn: " | የመጨረሻው መረጃ: ",
+    noDataRange: "ለዚህ የተመረጠ ጊዜ የቀረበ ሪፖርት የለም። የመጨረሻው የተመዘገበው ሪፖርት: ",
   },
 };
 
@@ -332,7 +340,8 @@ function load() {
 
 function initDashboard(data) {
   lastData = data;
-  document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today;
+  const latestDate = data.latest_date || (data.dates.length ? data.dates[data.dates.length - 1] : "N/A");
+  document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today + t("lastReportOn") + latestDate;
 
   const PALETTE = ["#4a7fa6", "#4c7a5b", "#e8a33d", "#b23a2e", "#8e6bb0", "#c76b98", "#2f9e9e"];
   const siteColor = {};
@@ -438,6 +447,16 @@ function initDashboard(data) {
 
   function render() {
     const idxs = indicesInRange();
+    const noDataEl = document.getElementById("noDataNotice");
+    if (noDataEl) {
+      if (idxs.length === 0) {
+        noDataEl.style.display = "block";
+        const latestDate = data.latest_date || (data.dates.length ? data.dates[data.dates.length - 1] : "N/A");
+        document.getElementById("noDataNoticeText").textContent = t("noDataRange") + latestDate;
+      } else {
+        noDataEl.style.display = "none";
+      }
+    }
     const labels = idxs.map(i => data.dates[i]);
     const s = selectedSite;
 
@@ -628,7 +647,8 @@ function initDashboard(data) {
   };
 
   onLangChange = () => {
-    document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today;
+    const latestDate = data.latest_date || (data.dates.length ? data.dates[data.dates.length - 1] : "N/A");
+    document.getElementById("updatedNote").textContent = t("lastUpdated") + data.today + t("lastReportOn") + latestDate;
     render();
   };
 

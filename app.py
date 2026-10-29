@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import time
+import re
 from datetime import datetime, timezone, timedelta
 
 # Ethiopia is UTC+3 year-round (no daylight saving), so we compute this
@@ -900,7 +901,9 @@ def build_dashboard_data():
         for k, v in [("eggs", eggs), ("broken", broken), ("sold", sold), ("revenue", revenue), ("fodder_kg", fodder), ("other_kg", other)]:
             sd[k] += v
 
-    dates_sorted = sorted(by_date.keys())
+    valid_dates = [d for d in by_date.keys() if re.match(r"^\d{4}-\d{2}-\d{2}$", d)]
+    dates_sorted = sorted(valid_dates)
+    latest_date = dates_sorted[-1] if dates_sorted else None
     # Always show all three known sites (even with zero data), plus any
     # unexpected site values found in the sheet, so nothing silently vanishes.
     extra_sites = sorted(s for s in by_site_date.keys() if s not in ALL_SITES)
@@ -925,6 +928,7 @@ def build_dashboard_data():
 
     chart_data = {
         "today": now_ethiopia().strftime("%Y-%m-%d"),
+        "latest_date": latest_date,
         "dates": dates_sorted,
         "sites": sites_sorted,
         "series": site_series,
