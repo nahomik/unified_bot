@@ -1042,8 +1042,16 @@ def debug_status():
             return "***"
         return f"{val[:4]}...{val[-4:]}"
 
+    from bots import back_checker, field_checker
+    bc_sheet, bc_err = back_checker.get_sheet()
+    fc_sheet, fc_err = field_checker.get_sheet()
+
     return jsonify({
         "ps": ps_out,
+        "sheets_connection": {
+            "back_checker": {"ok": bool(bc_sheet), "err": str(bc_err) if bc_err else None, "title": bc_sheet.title if bc_sheet else None},
+            "field_checker": {"ok": bool(fc_sheet), "err": str(fc_err) if fc_err else None, "title": fc_sheet.title if fc_sheet else None},
+        },
         "tokens": {
             "BACK_CHECKER_BOT_TOKEN": mask(os.environ.get("BACK_CHECKER_BOT_TOKEN")),
             "TELEGRAM_TOKEN": mask(os.environ.get("TELEGRAM_TOKEN")),
