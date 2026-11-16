@@ -1026,6 +1026,40 @@ def healthz():
         }
     })
 
+@app.route("/debug-status", methods=["GET"])
+def debug_status():
+    import subprocess
+    try:
+        ps_out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.STDOUT)
+    except Exception as e:
+        ps_out = f"ps error: {e}"
+
+    def mask(val):
+        if not val:
+            return None
+        val = str(val).strip()
+        if len(val) <= 8:
+            return "***"
+        return f"{val[:4]}...{val[-4:]}"
+
+    return jsonify({
+        "ps": ps_out,
+        "tokens": {
+            "BACK_CHECKER_BOT_TOKEN": mask(os.environ.get("BACK_CHECKER_BOT_TOKEN")),
+            "TELEGRAM_TOKEN": mask(os.environ.get("TELEGRAM_TOKEN")),
+            "FIELD_CHECKER_BOT_TOKEN": mask(os.environ.get("FIELD_CHECKER_BOT_TOKEN")),
+            "FIELD_TELEGRAM_TOKEN": mask(os.environ.get("FIELD_TELEGRAM_TOKEN")),
+            "POULTRY_BOT_TOKEN": mask(os.environ.get("POULTRY_BOT_TOKEN")),
+            "BOT_TOKEN": mask(os.environ.get("BOT_TOKEN")),
+        },
+        "sheet_ids": {
+            "BACK_CHECKER_SHEET_ID": mask(os.environ.get("BACK_CHECKER_SHEET_ID")),
+            "FIELD_CHECKER_SHEET_ID": mask(os.environ.get("FIELD_CHECKER_SHEET_ID")),
+            "POULTRY_SHEET_ID": mask(os.environ.get("POULTRY_SHEET_ID")),
+        },
+        "has_service_account_file": os.path.exists("service_account.json"),
+    })
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
